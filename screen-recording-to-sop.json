@@ -1,0 +1,1326 @@
+{
+  "name": "AI Screen Recording to SOP & Automation Spec Generator (Gemini + n8n)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DRIVE_ID",
+          "cachedResultName": "Screen Recordings"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "bf48b5b6-5231-4bde-94cb-c6cc681c1c3d",
+      "name": "New recording in Drive",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f-id",
+              "name": "file_id",
+              "value": "={{ $json.id ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f-name",
+              "name": "file_name",
+              "value": "={{ $json.name ?? \"recording\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f-mime",
+              "name": "mime_type",
+              "value": "={{ $json.mimeType ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f-size",
+              "name": "size_mb",
+              "value": "={{ Math.round((Number($json.size ?? 0) / 1048576) * 10) / 10 }}",
+              "type": "number"
+            },
+            {
+              "id": "f-link",
+              "name": "web_view_link",
+              "value": "={{ $json.webViewLink ?? (\"https://drive.google.com/file/d/\" + $json.id + \"/view\") }}",
+              "type": "string"
+            },
+            {
+              "id": "f-video",
+              "name": "is_video",
+              "value": "={{ String($json.mimeType ?? \"\").startsWith(\"video/\") }}",
+              "type": "boolean"
+            },
+            {
+              "id": "f-audio",
+              "name": "is_audio",
+              "value": "={{ String($json.mimeType ?? \"\").startsWith(\"audio/\") }}",
+              "type": "boolean"
+            },
+            {
+              "id": "f-media",
+              "name": "is_media",
+              "value": "={{ String($json.mimeType ?? \"\").startsWith(\"video/\") || String($json.mimeType ?? \"\").startsWith(\"audio/\") }}",
+              "type": "boolean"
+            },
+            {
+              "id": "f-model",
+              "name": "analysis_model",
+              "value": "models/gemini-3.5-flash",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "37efb6d0-748a-45aa-bdc5-a2603a6989ec",
+      "name": "Normalize file info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c-media",
+              "leftValue": "={{ $json.is_media }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "378e1cf1-ae8e-4e94-874b-36a60400737f",
+      "name": "Is it a video or audio file?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "screen_recording_runs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "file_id",
+              "keyValue": "={{ $json.file_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a1a26c43-94b7-42e7-addc-b59477cc424e",
+      "name": "Not processed before?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "screen_recording_runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_id": "={{ $json.file_id }}",
+            "file_name": "={{ $json.file_name }}",
+            "status": "processing",
+            "model": "={{ $json.analysis_model }}",
+            "started_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "file_id",
+              "displayName": "file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "process_name",
+              "displayName": "process_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_id",
+              "displayName": "doc_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_url",
+              "displayName": "doc_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "started_at",
+              "displayName": "started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "finished_at",
+              "displayName": "finished_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa0ba5fd-3f9e-4598-9b06-ba011debb0c9",
+      "name": "Log run started",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $(\"Normalize file info\").item.json.file_id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "0a0a461e-5b7c-40b5-9cdf-fdb73d01e0f2",
+      "name": "Download recording",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.5-flash",
+          "cachedResultName": "models/gemini-3.5-flash"
+        },
+        "text": "You are a senior business-process analyst. You are watching a screen recording in which a person performs a task on their computer, possibly while narrating. Your job is to capture EVERYTHING needed to automate this task later: every application and website used, every click and field, every value typed or read, every decision made, and anything said aloud.\n\nWatch the entire recording, including the audio. Then return ONE JSON object and nothing else. No markdown fences, no commentary.\n\nJSON shape:\n{\n  \"process_name\": \"short name for the task, e.g. Log a new purchase in inventory\",\n  \"goal\": \"what the person is trying to achieve, one or two sentences\",\n  \"actor\": \"who performs this, e.g. owner, staff, customer\",\n  \"apps\": [{\"name\": \"\", \"url_or_window\": \"\", \"purpose\": \"\"}],\n  \"steps\": [{\"index\": 1, \"start_time\": \"mm:ss\", \"end_time\": \"mm:ss\", \"app\": \"\", \"action\": \"what they did, precisely\", \"ui_element\": \"button, menu, field or page involved\", \"data_entered\": \"exact text or values typed (mask passwords as ***)\", \"data_read\": \"values they looked at or copied\", \"decision\": \"any condition they checked and what they chose\", \"notes\": \"anything else relevant\"}],\n  \"data_fields\": [{\"name\": \"\", \"example_value\": \"\", \"type\": \"text|number|date|email|url|file|boolean\", \"source_app\": \"\", \"destination_app\": \"\"}],\n  \"decisions\": [{\"condition\": \"\", \"if_true\": \"\", \"if_false\": \"\"}],\n  \"inputs\": [\"what must exist before the task starts\"],\n  \"outputs\": [\"what exists when the task is done\"],\n  \"triggers_observed\": [\"what seems to start this task, e.g. a new email, a message, a daily routine\"],\n  \"repeated_patterns\": [\"actions repeated for several items, with how many times\"],\n  \"narration_summary\": \"what the person said, summarised, including rules or exceptions they mention\",\n  \"edge_cases_mentioned\": [\"exceptions, special cases or warnings mentioned or shown\"],\n  \"uncertainties\": [\"anything you could not see or hear clearly\"]\n}\n\nRules:\n- Transcribe visible text, field labels, column headers, sheet or tab names and URLs exactly as shown.\n- Use real timestamps from the video for every step.\n- Record every switch between windows or tabs as its own step.\n- Never invent steps, values or apps you did not see. Put guesses in \"uncertainties\" instead.\n- Mask passwords, API keys and card numbers as ***.\n- If the recording contains no task (blank screen, no activity), return the object with an empty \"steps\" array and explain in \"uncertainties\".",
+        "inputType": "binary",
+        "options": {
+          "maxOutputTokens": 16384
+        }
+      },
+      "id": "a5dc02c7-51ef-4fa6-b95e-7c522bff84ab",
+      "name": "Watch the recording (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1680,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json || {};\nlet raw = '';\nif (typeof j.text === 'string') raw = j.text;\nelse if (j.content && Array.isArray(j.content.parts)) raw = j.content.parts.map(p => p.text || '').join('\\n');\nelse if (Array.isArray(j.candidates) && j.candidates[0] && j.candidates[0].content && Array.isArray(j.candidates[0].content.parts)) raw = j.candidates[0].content.parts.map(p => p.text || '').join('\\n');\nelse if (Array.isArray(j.parts)) raw = j.parts.map(p => p.text || '').join('\\n');\nelse raw = JSON.stringify(j);\nconst cleaned = String(raw).trim().replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\nlet obs = null; let parseError = '';\ntry { obs = JSON.parse(cleaned); } catch (e) {\n  const m = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { obs = JSON.parse(m[0]); } catch (e2) { parseError = e2.message; } } else { parseError = e.message; }\n}\nif (!obs || typeof obs !== 'object' || Array.isArray(obs)) { obs = { process_name: '', raw_observations: cleaned }; }\nconst steps = Array.isArray(obs.steps) ? obs.steps : [];\nconst file = $('Normalize file info').first().json;\nreturn [{ json: {\n  file_id: file.file_id,\n  file_name: file.file_name,\n  observations: obs,\n  observations_json: JSON.stringify(obs, null, 2),\n  step_count: steps.length,\n  observed_process_name: obs.process_name || '',\n  parse_error: parseError,\n  raw_length: String(raw).length\n} }];"
+      },
+      "id": "00c1bb11-489f-4f3e-a7fa-9b29195f6ccf",
+      "name": "Parse observations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Recording file: {{ $json.file_name }}\nObserved steps: {{ $json.step_count }}\n\nOBSERVATION LOG (JSON):\n{{ $json.observations_json }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert automation architect who turns process observations into build-ready prompts. You know n8n deeply: triggers (Webhook, Schedule, Form, Gmail, Telegram, Google Drive, Google Sheets), core nodes (Edit Fields, If, Switch, Code, Merge, Loop Over Items), integration nodes (Google Sheets, Google Docs, Google Drive, Gmail, Telegram, Slack, Airtable, HubSpot, Notion, Data Tables), AI nodes (AI Agent, Basic LLM Chain, Structured Output Parser) and good practice (idempotency, validation, error branches, human approval for destructive actions).\n\nYou will receive a JSON observation log produced from a screen recording. Produce the fields of the required schema with these standards:\n\nprocess_name: a short, specific title in Title Case.\n\nsummary: 3 to 5 sentences for a business owner: what the process does today, who does it, how often, and what automating it would save.\n\nn8n_build_prompt: a complete, self-contained prompt that an AI workflow builder (or an n8n developer) can paste and act on without seeing the video. Write it as instructions, in this order, using plain headings in CAPITALS:\n  OBJECTIVE - one paragraph.\n  TRIGGER - the real event that should start the workflow, chosen from what was observed (never a manual trigger), with any schedule or filter.\n  INPUTS - every data field with its exact name as seen on screen, type, example value and where it comes from.\n  STEP-BY-STEP LOGIC - numbered steps mapping each observed action to the n8n node that should perform it, naming the service, resource and operation (for example Google Sheets - append row to tab INVENTORY). Include the exact column names, sheet tabs, folder names, labels or channel names seen.\n  DECISIONS AND BRANCHES - every condition as an If or Switch with the exact rule.\n  DESTINATIONS - where results are written or sent, with exact names.\n  IDEMPOTENCY - the stable key that prevents double processing on retry.\n  VALIDATION AND EDGE CASES - malformed input, empty results, API failure, and the exceptions mentioned in narration.\n  ERROR HANDLING - what to alert, where, and what to log.\n  NODE NAMING - instruct that nodes be named for humans.\n  TEST CASES - at least 3 concrete inputs with expected outcomes drawn from the recording.\n  ASSUMPTIONS - everything inferred rather than observed, so the builder can confirm.\nUse the exact values from the observation log. Where the log is uncertain, say so explicitly in the prompt instead of guessing.\n\ngeneric_spec: the same process written as a tool-agnostic requirements spec (purpose, trigger, inputs, process steps, business rules, outputs, exceptions, success criteria) with no n8n or vendor-specific wording, suitable for Zapier, Make or a developer.\n\nopen_questions: the specific questions a builder must ask the process owner before building, each one answerable in a sentence. Include at least the questions raised by the uncertainties in the log.\n\nconfidence: high if the recording showed the full process clearly with narration; medium if steps were visible but some values or rules were unclear; low if major parts were missing.\n\nReturn only the structured object. Do not wrap it in markdown."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "9b128cb5-177a-4915-a4fe-d4673061c4c2",
+      "name": "Write the build prompt (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2160,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash",
+        "options": {
+          "maxOutputTokens": 16384,
+          "temperature": 0.3
+        }
+      },
+      "id": "7d4962d2-4d43-448a-8045-70c472fc17ce",
+      "name": "Gemini 3.5 Flash (prompt writer)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2128,
+        544
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"process_name\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"},\"n8n_build_prompt\":{\"type\":\"string\"},\"generic_spec\":{\"type\":\"string\"},\"open_questions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"]}},\"required\":[\"process_name\",\"summary\",\"n8n_build_prompt\",\"generic_spec\",\"open_questions\",\"confidence\"],\"additionalProperties\":false}",
+        "autoFix": true
+      },
+      "id": "397d014f-3d96-4e07-8e30-af77bafad7cb",
+      "name": "Prompt document schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2352,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash",
+        "options": {
+          "maxOutputTokens": 16384,
+          "temperature": 0
+        }
+      },
+      "id": "44be8ad8-bf1a-4f7b-8328-bb8fa52f0528",
+      "name": "Gemini 3.5 Flash (JSON fixer)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        720
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const first = $input.first().json || {};\nconst out = (first.output && typeof first.output === 'object') ? first.output : first;\nconst obsItem = $('Parse observations').first().json;\nconst file = $('Normalize file info').first().json;\nconst obs = obsItem.observations || {};\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst str = v => (v === undefined || v === null) ? '' : (typeof v === 'string' ? v : JSON.stringify(v));\nconst name = String(out.process_name || obsItem.observed_process_name || file.file_name || 'Untitled process').trim();\nconst date = new Date().toISOString().slice(0, 10);\nconst title = 'Workflow Prompt - ' + name + ' - ' + date;\nconst qs = Array.isArray(out.open_questions) ? out.open_questions : [];\nconst steps = Array.isArray(obs.steps) ? obs.steps : [];\nconst L = [];\nL.push('WORKFLOW PROMPT: ' + name.toUpperCase());\nL.push('Generated ' + new Date().toISOString() + ' from recording \"' + file.file_name + '\" (' + file.size_mb + ' MB). Confidence: ' + (out.confidence || 'unknown') + '.');\nL.push('Source recording: ' + file.web_view_link);\nL.push('');\nL.push('1. SUMMARY'); L.push(str(out.summary)); L.push('');\nL.push('2. N8N BUILD PROMPT (paste this to an AI workflow builder)'); L.push(str(out.n8n_build_prompt)); L.push('');\nL.push('3. TOOL-AGNOSTIC AUTOMATION SPEC'); L.push(str(out.generic_spec)); L.push('');\nL.push('4. OPEN QUESTIONS TO CONFIRM BEFORE BUILDING');\nif (qs.length) qs.forEach((q, i) => L.push((i + 1) + '. ' + str(q))); else L.push('None identified.');\nL.push('');\nL.push('5. STEP-BY-STEP OBSERVATION LOG');\nif (!steps.length) L.push('No structured steps were extracted from the recording.');\nsteps.forEach((s, i) => {\n  const t = [s.start_time, s.end_time].filter(Boolean).join(' - ');\n  L.push((s.index ?? (i + 1)) + '. ' + (t ? '[' + t + '] ' : '') + (s.app ? s.app + ': ' : '') + str(s.action));\n  if (s.ui_element) L.push('   UI: ' + str(s.ui_element));\n  if (s.data_entered) L.push('   Entered: ' + str(s.data_entered));\n  if (s.data_read) L.push('   Read: ' + str(s.data_read));\n  if (s.decision) L.push('   Decision: ' + str(s.decision));\n  if (s.notes) L.push('   Notes: ' + str(s.notes));\n});\nL.push('');\nL.push('6. APPS, DATA FIELDS, DECISIONS AND NARRATION');\nL.push(JSON.stringify({ goal: obs.goal, actor: obs.actor, apps: obs.apps || [], data_fields: obs.data_fields || [], decisions: obs.decisions || [], inputs: obs.inputs || [], outputs: obs.outputs || [], triggers_observed: obs.triggers_observed || [], repeated_patterns: obs.repeated_patterns || [], narration_summary: obs.narration_summary, edge_cases_mentioned: obs.edge_cases_mentioned || [], uncertainties: obs.uncertainties || [] }, null, 2));\nif (obs.raw_observations) { L.push(''); L.push('RAW MODEL OUTPUT (could not be parsed as JSON)'); L.push(str(obs.raw_observations)); }\nreturn [{ json: {\n  doc_title: title,\n  doc_text: L.join('\\n'),\n  process_name: name,\n  process_name_html: esc(name),\n  summary: str(out.summary),\n  confidence: str(out.confidence),\n  open_question_count: qs.length,\n  step_count: steps.length,\n  file_id: file.file_id,\n  file_name: file.file_name\n} }];"
+      },
+      "id": "a034189f-a005-4781-a43c-c1e964126633",
+      "name": "Assemble document text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "folderId": "REPLACE_WITH_YOUR_DRIVE_FOLDER_ID",
+        "title": "={{ $json.doc_title }}"
+      },
+      "id": "bf19cb3b-6aee-427b-9096-308b345beb9d",
+      "name": "Create Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Docs account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $(\"Assemble document text\").item.json.doc_text }}"
+            }
+          ]
+        }
+      },
+      "id": "fc3e904e-f35f-45e5-b78d-aa1c7dfd6bb0",
+      "name": "Fill Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Docs account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "screen_recording_runs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "file_id",
+              "keyValue": "={{ $(\"Normalize file info\").item.json.file_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "done",
+            "process_name": "={{ $(\"Assemble document text\").item.json.process_name }}",
+            "doc_id": "={{ $(\"Create Google Doc\").item.json.id }}",
+            "doc_url": "={{ \"https://docs.google.com/document/d/\" + $(\"Create Google Doc\").item.json.id + \"/edit\" }}",
+            "finished_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "file_id",
+              "displayName": "file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "process_name",
+              "displayName": "process_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_id",
+              "displayName": "doc_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_url",
+              "displayName": "doc_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "started_at",
+              "displayName": "started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "finished_at",
+              "displayName": "finished_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ed4cb3fe-6c26-41ac-93d4-8b415bbd21c4",
+      "name": "Mark run complete",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3168,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID",
+        "text": "=✅ <b>Workflow prompt ready</b>\n\n<b>Process:</b> {{ $(\"Assemble document text\").item.json.process_name_html }}\n<b>Recording:</b> {{ $(\"Normalize file info\").item.json.file_name.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\") }}\n<b>Steps observed:</b> {{ $(\"Assemble document text\").item.json.step_count }}\n<b>Confidence:</b> {{ $(\"Assemble document text\").item.json.confidence }}\n<b>Open questions:</b> {{ $(\"Assemble document text\").item.json.open_question_count }}\n\n<a href=\"{{ $json.doc_url }}\">Open the Google Doc</a>\n\nThe Doc holds the n8n build prompt, a tool-agnostic spec, the open questions and the full step log.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "7fffe528-52cc-480b-9cf6-e02b867ee032",
+      "name": "Send Doc link to owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3408,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "webhookId": "83bc280e-7404-47ba-9035-a1e07f25c805",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "screen_recording_runs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "file_id",
+              "keyValue": "={{ $(\"Normalize file info\").item.json.file_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "error": "={{ String($json.error?.message ?? $json.error?.description ?? $json.error ?? $json.message ?? \"Unknown error\").slice(0, 900) }}",
+            "finished_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "file_id",
+              "displayName": "file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "process_name",
+              "displayName": "process_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_id",
+              "displayName": "doc_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doc_url",
+              "displayName": "doc_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "started_at",
+              "displayName": "started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "finished_at",
+              "displayName": "finished_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f256958c-d7a5-49b1-b60a-d19a64d8397c",
+      "name": "Record failure",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2448,
+        880
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Skipped <b>{{ $json.file_name.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\") }}</b> in the Screen Recordings folder: it is not a video or audio file ({{ $json.mime_type || \"unknown type\" }}). Upload an MP4, MOV, WEBM, MP3, M4A or WAV recording to analyse it.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "cdf46e9f-959e-4829-bb2e-c13a5906ba9b",
+      "name": "Tell owner: not a recording",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        528
+      ],
+      "webhookId": "11d2daf0-4a10-4a8d-ac9a-248a83a40f46",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID",
+        "text": "=⚠️ <b>Screen recording analysis failed</b>\n\n<b>Recording:</b> {{ $(\"Normalize file info\").item.json.file_name.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\") }}\n<b>Execution:</b> {{ $execution.id }}\n<b>Error:</b> {{ String($json.error ?? \"see execution log\").replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\").slice(0, 600) }}\n\nThe run is marked failed in the screen_recording_runs table. Fix the cause, delete that row, and re-upload the recording to retry.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c144399d-81ee-4cfb-ac8d-baea2fb4ff84",
+      "name": "Alert owner of failure",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        880
+      ],
+      "webhookId": "9fd7371a-6ccd-4ade-ac12-e81cacb97ae7",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Screen Recording Analyzer\n**Purpose:** turn a screen recording of someone doing a task into a build-ready automation prompt, with no manual note-taking.\n\n**How it works:** drop a recording into the *Screen Recordings* Drive folder. Within a minute the workflow downloads it, Gemini watches the whole video (screen and audio) and writes a structured observation log, a second Gemini pass turns that log into an n8n build prompt plus a tool-agnostic spec and a list of open questions, and everything is saved as a Google Doc in *Workflow Prompts*. You get a Telegram message with the link.\n\n**Safety:** each Drive file is processed once (tracked in the `screen_recording_runs` Data Table). Non-video files are skipped with a message. Every AI and Google step has retries and an error branch that logs the failure and alerts you.",
+        "height": 380,
+        "width": 900
+      },
+      "id": "52908b67-ed54-4fa1-93df-cb79831e6480",
+      "name": "Sticky Note d7f5f441",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1 · Intake and guard rails\n- **New recording in Drive** polls the *Screen Recordings* folder every minute.\n- **Normalize file info** keeps id, name, type, size and link, and flags whether it is a video, an audio file, or neither.\n- **Is it a video or audio file?** stops anything else (documents, images) and tells you via Telegram.\n- **Not processed before?** checks the run table by Drive file id so a retry or duplicate upload never runs twice.\n- **Log run started** writes a `processing` row before any expensive step.",
+        "height": 380,
+        "width": 680,
+        "color": 4
+      },
+      "id": "04dfc236-e21f-4a43-917f-6eab4be53937",
+      "name": "Sticky Note a07591a2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        944,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2 · Two AI passes, deliberately separate\n- **Video or audio?** routes by file type after the download.\n- **Watch the recording (Gemini 3.5 Flash)** receives a video file and returns a strict JSON observation log from screen and audio: apps, timestamped steps, fields, decisions, narration, uncertainties.\n- **Listen to the recording (Gemini 3.5 Flash)** does the same from an audio-only file at roughly a tenth of the token cost. Use it for talking-head or voice-note recordings where nothing on screen matters; anything it cannot confirm without a picture is listed under uncertainties.\n- **Parse observations** accepts either path, tolerates markdown fences or prose around the JSON, and never crashes.\n- **Write the build prompt (Gemini 3.5 Flash)** reads only the log, so the prompt is grounded in what was actually seen or heard. The **Prompt document schema** parser enforces the six output fields and auto-fixes malformed JSON.\n\n**Upgrading:** once the key is on a paid tier, change the model on *Gemini 3.5 Flash (prompt writer)* to `models/gemini-3.1-pro-preview` for a deeper build prompt. The Pro preview was rate-limited on this key on 2026-10-03.",
+        "height": 380,
+        "width": 900,
+        "color": 6
+      },
+      "id": "82502e1b-430e-4625-8de9-a8d9c92ea4e0",
+      "name": "Sticky Note e7c304ba",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3 · Deliver and record\n- **Assemble document text** lays out the Doc: summary, n8n build prompt, tool-agnostic spec, open questions, the full step log and the raw observation data.\n- **Create Google Doc** in *Workflow Prompts*, then **Fill Google Doc** inserts the text.\n- **Mark run complete** stores the Doc id and link on the run row.\n- **Send Doc link to owner** posts a Telegram summary with the link.",
+        "height": 380,
+        "width": 820,
+        "color": 7
+      },
+      "id": "8923c23e-7ba9-4a2f-b2fa-196279114598",
+      "name": "Sticky Note 79481782",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## If something fails\nThe error outputs of the download, both Gemini observation steps, the prompt writer and both Google Docs steps all land here. **Record failure** sets the run row to `failed` with the error text, and **Alert owner of failure** sends the execution id to Telegram. To retry, delete the failed row from `screen_recording_runs` and re-upload the recording.",
+        "height": 200,
+        "width": 720,
+        "color": 3
+      },
+      "id": "3a597238-d59b-4a39-9f58-8be4d8839fc3",
+      "name": "Sticky Note 469190be",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-video",
+                    "leftValue": "={{ $(\"Normalize file info\").item.json.is_video }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "video"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-audio",
+                    "leftValue": "={{ $(\"Normalize file info\").item.json.is_audio }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7e11b345-4b7b-4c6f-b6a3-923718a0caa1",
+      "name": "Video or audio?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.5-flash",
+          "cachedResultName": "models/gemini-3.5-flash"
+        },
+        "text": "You are a senior business-process analyst. You are listening to an audio recording in which a person describes or performs a task, possibly while narrating what they do on their computer. There is no picture: everything you know comes from what is said and heard. Your job is to capture EVERYTHING needed to automate this task later: every application and website mentioned, every action described, every value spoken, every rule or decision explained.\n\nListen to the entire recording. Then return ONE JSON object and nothing else. No markdown fences, no commentary.\n\nJSON shape:\n{\n  \"process_name\": \"short name for the task, e.g. Log a new purchase in inventory\",\n  \"goal\": \"what the person is trying to achieve, one or two sentences\",\n  \"actor\": \"who performs this, e.g. owner, staff, customer\",\n  \"apps\": [{\"name\": \"\", \"url_or_window\": \"\", \"purpose\": \"\"}],\n  \"steps\": [{\"index\": 1, \"start_time\": \"mm:ss\", \"end_time\": \"mm:ss\", \"app\": \"\", \"action\": \"what they describe doing, precisely\", \"ui_element\": \"button, menu, field or page they mention\", \"data_entered\": \"exact values they say they type (mask passwords as ***)\", \"data_read\": \"values they say they look at or copy\", \"decision\": \"any condition they describe and what they choose\", \"notes\": \"anything else relevant\"}],\n  \"data_fields\": [{\"name\": \"\", \"example_value\": \"\", \"type\": \"text|number|date|email|url|file|boolean\", \"source_app\": \"\", \"destination_app\": \"\"}],\n  \"decisions\": [{\"condition\": \"\", \"if_true\": \"\", \"if_false\": \"\"}],\n  \"inputs\": [\"what must exist before the task starts\"],\n  \"outputs\": [\"what exists when the task is done\"],\n  \"triggers_observed\": [\"what seems to start this task\"],\n  \"repeated_patterns\": [\"actions repeated for several items, with how many times\"],\n  \"narration_summary\": \"what the person said, summarised, including rules or exceptions they mention\",\n  \"edge_cases_mentioned\": [\"exceptions, special cases or warnings mentioned\"],\n  \"uncertainties\": [\"anything unclear, and every detail that could not be confirmed because there is no screen\"]\n}\n\nRules:\n- Quote names of apps, sheets, tabs, fields, labels and URLs exactly as spoken.\n- Use real timestamps from the audio for every step.\n- Never invent steps, values or apps that were not said. Put guesses in \"uncertainties\" instead.\n- Mask passwords, API keys and card numbers as ***.\n- If the audio contains no task description (silence, music, unrelated talk), return the object with an empty \"steps\" array and explain in \"uncertainties\".",
+        "inputType": "binary",
+        "options": {
+          "maxOutputTokens": 16384
+        }
+      },
+      "id": "7b4bb35e-d0f1-4bda-b74e-53159b459848",
+      "name": "Listen to the recording (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1680,
+        448
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "New recording in Drive": {
+      "main": [
+        [
+          {
+            "node": "Normalize file info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize file info": {
+      "main": [
+        [
+          {
+            "node": "Is it a video or audio file?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not processed before?": {
+      "main": [
+        [
+          {
+            "node": "Log run started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log run started": {
+      "main": [
+        [
+          {
+            "node": "Download recording",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download recording": {
+      "main": [
+        [
+          {
+            "node": "Video or audio?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch the recording (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse observations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse observations": {
+      "main": [
+        [
+          {
+            "node": "Write the build prompt (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the build prompt (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Assemble document text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt document schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Write the build prompt (Gemini)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 3.5 Flash (JSON fixer)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt document schema",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble document text": {
+      "main": [
+        [
+          {
+            "node": "Create Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Fill Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fill Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Mark run complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark run complete": {
+      "main": [
+        [
+          {
+            "node": "Send Doc link to owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record failure": {
+      "main": [
+        [
+          {
+            "node": "Alert owner of failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 3.5 Flash (prompt writer)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write the build prompt (Gemini)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it a video or audio file?": {
+      "main": [
+        [
+          {
+            "node": "Not processed before?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell owner: not a recording",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video or audio?": {
+      "main": [
+        [
+          {
+            "node": "Watch the recording (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Listen to the recording (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listen to the recording (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse observations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
